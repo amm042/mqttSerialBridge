@@ -322,6 +322,11 @@ class SProxy:
                 while self.local.thread.is_alive() and self.remote.thread.is_alive():
                     time.sleep(1)
 
-        
+        if self.local.thread.is_alive():
+            self.local.shutdown()
+            self.local.thread.join()
+        if self.remote.thread.is_alive():
+            self.remote.shutdown()
+            self.remote.thread.join()
 
                 
