@@ -7,9 +7,11 @@ import logging
 import struct
 import datetime
 from xb900hp import XBee900HP
+class XBeeDied(Exception): pass
 
 class XBeeDevice:
-        
+    MAX_TIMEOUTS = 6
+    
     def __init__(self, portstr, rxcallback):
         dev, baud, opts = portstr.split(":")
         self.log = logging.getLogger(__name__)
@@ -27,6 +29,7 @@ class XBeeDevice:
         self._max_packets = 3
         self._timeout = datetime.timedelta(seconds=5)        
         self._pending = {}
+        self._timeout_err_cnt = 0
         self._idle = threading.Event()
         self.address = 0
         self.send_cmd("at", command=b'TO', parameter=b'\x40')
@@ -36,15 +39,27 @@ class XBeeDevice:
         
     def flush(self):
         if not self._idle.wait(self._timeout.total_seconds()):
+            self._timeout_err_cnt += 1
+            if self._timeout_err_cnt > XBeeDevice.MAX_TIMEOUTS:
+                raise XBeeDied()
             raise TimeoutError("Flush timeout.")
+        self._timeout_err_cnt = 0
         
     def sendwait(self, data, timeout = None, **kwargs):
         'send the message and wait for the result'
+        
+        # may raise timeouterror     
+        self.flush()
+                              
         e = self.send(data, **kwargs)
         if timeout == None:
             timeout = self._timeout.total_seconds()
         if not e.wait(timeout):
+            self._timeout_err_cnt += 1
+            if self._timeout_err_cnt > XBeeDevice.MAX_TIMEOUTS:
+                raise XBeeDied()
             raise TimeoutError("Timeout sending message")
+        self._timeout_err_cnt = 0
         return e.pkt
         
     def send(self, data, dest= 0xffff):

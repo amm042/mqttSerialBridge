@@ -305,11 +305,13 @@ class SProxy:
         if self._running:
             self.LOG.info("Proxy server is running.")
             
+            
+            
             if timeout != None:
                 time.sleep(timeout)
             else:
-                while True:
-                    time.sleep(5)
+                while self.thread.is_alive():
+                    time.sleep(1)
 
         
 

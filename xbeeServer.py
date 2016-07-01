@@ -103,6 +103,8 @@ class LinkedXbeeServer():
                     except TimeoutError:
                         self.LOG.warn("timeout sending message, retry")
                     tries += 1
+                if success == False:
+                    break
             
         else:
             self.LOG.debug("tx [{}, cr={}] bytes WITHOUT REMOTE: {}".format(len(data),ratio,                                                                                                        
