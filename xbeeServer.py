@@ -102,8 +102,8 @@ class LinkedXbeeServer():
                     try:                            
                         p = self.xbee.sendwait(f, dest=self._remote_addr)
                         success = 'status' in p and p['status'] == b'\x00'
-                    except TimeoutError:
-                        self.LOG.warn("timeout sending message, retry")
+                    except TimeoutError as x:
+                        self.LOG.warn("timeout sending message, retry ({})".format(x))
                     tries += 1
                 if success == False:
                     break
