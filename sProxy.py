@@ -110,7 +110,7 @@ class ProxyTCPClient():
     def _handle_request_noblock(self):
         'this is called from the main input loop when there is data to be read from the port'
         try:
-            data = self.socket.recv(4*1024)
+            data = self.socket.recv(1024)
         except ConnectionResetError:
             data = ""            
                     
