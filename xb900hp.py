@@ -31,15 +31,15 @@ class XBee900HP(xbee.ieee.XBee):
                          {'name':'data',            'len':None,     'default':None}]
                     }
     
-    tx_status_strings = {0x00: "success",
-                         0x01: "MAC ACK failure",
-                         0x02: "Collision Avoidance Failure",
-                         0x21: "Network ACK Failure",
-                         0x25: "Route Not Found",
-                         0x31: "Internal Resource Error",
-                         0x32: "Internal Error",
-                         0x74: "Payload too large.",
-                         0x75: "Indirect message unrequested."}
+    tx_status_strings = {b'\x00': "success",
+                         b'\x01': "MAC ACK failure",
+                         b'\x02': "Collision Avoidance Failure",
+                         b'\x21': "Network ACK Failure",
+                         b'\x25': "Route Not Found",
+                         b'\x31': "Internal Resource Error",
+                         b'\x32': "Internal Error",
+                         b'\x74': "Payload too large.",
+                         b'\x75': "Indirect message unrequested."}
     
     api_responses = {b"\x90":
                         {'name':'rx',
