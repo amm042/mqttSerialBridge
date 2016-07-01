@@ -2,7 +2,9 @@ from xbeeDevice import XBeeDevice
 import logging
 import threading
 import queue
-import gzip
+import zlib
+import fragmentation as frag
+
 
 class LinkedXbeeServer():
     'like socketserver.BaseServer but for XBee API links'
@@ -71,22 +73,28 @@ class LinkedXbeeServer():
     
     def _handle_request_noblock(self, dest, source, data):                   
         
-        data = gzip.decompress(data)
+        #data = zlib.decompress(data)
          
         self.LOG.debug("rx [{}] bytes from {:x}: {}".format(len(data),
                                                             source,                                                    
                                                             data))
-        self.link.proxy(data)
-    
+        try:
+            r = frag.receive_frag(data)        
+            if r != None:            
+                self.link.proxy(zlib.decompress(r))
+        except frag.CrcError:
+            self.LOG.warn ("  couldn't decode packet, CRC error")
     def write(self, data):
         ilen = len(data)
-        data = gzip.compress(data)
+        data = zlib.compress(data)
         ratio = len(data)/float(ilen)
         if self._remote_addr!= None:
             self.LOG.debug("tx [{}, cr={}] bytes to {:x}: {}".format(len(data),ratio,
                                                                 self._remote_addr,                                                    
                                                                 data))
-            self.xbee.sendwait(data, dest=self._remote_addr)
+            
+            for f in frag.make_frags(data):                
+                self.xbee.sendwait(f, dest=self._remote_addr)
             
         else:
             self.LOG.debug("tx [{}, cr={}] bytes WITHOUT REMOTE: {}".format(len(data),ratio,                                                                                                        
