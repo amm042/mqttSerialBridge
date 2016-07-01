@@ -21,7 +21,7 @@ class TCPServerHandler(socketserver.BaseRequestHandler):
         self.server.clients.append(self)
         try:
             while True: 
-                data = self.request.recv(4*1024)
+                data = self.request.recv(1024)
                 if len(data) == 0:
                     LOG.debug("client at {} disconnect".format(self.client_address[0]))
                     break
