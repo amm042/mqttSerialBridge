@@ -6,7 +6,7 @@ logging.basicConfig(level=logging.INFO,
 
 if __name__ == "__main__":
     
-    px = sProxy.SProxy('xbee:/dev/ttyUSB1:38400:8N1:True',
+    px = sProxy.SProxy('xbee:/dev/ttyUSB0:38400:8N1:True',
                        'tcpclient:amm042:1883')
     px.run(timeout=None)
     
