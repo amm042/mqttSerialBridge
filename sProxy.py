@@ -29,8 +29,11 @@ class TCPServerHandler(socketserver.BaseRequestHandler):
                 LOG.debug("got [{}] bytes from {}: {}".format(len(data),
                                                                     self.client_address[0],                                                    
                                                                     data))
+                
+                
                 # send it out
                 self.server.link.proxy(data)
+                
         finally:
             self.server.clients.remove(self)
             
@@ -262,8 +265,12 @@ class Link():
         '''
         self.remote = other
     def proxy(self, data):
-        if self.remote:           
-            self.remote.write(data)
+        if self.remote:
+            try:           
+                self.remote.write(data)
+            except Exception as x:
+                self.LOG.critical("Remote link failed with: {}".format(x))
+                self.link.shutdown()    
         else:
             self.LOG.error("cannot proxy data without remote.")
     
