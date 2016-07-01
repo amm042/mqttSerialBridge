@@ -64,6 +64,8 @@ class XBeeDevice:
             self._timeout_err_cnt += 1
             if self._timeout_err_cnt > XBeeDevice.MAX_TIMEOUTS:
                 raise XBeeDied("sendwait too many timeouts")
+            
+            del self._pending[e.fid]
             raise TimeoutError("Timeout sending message")
         self._timeout_err_cnt = 0
         return e.pkt
@@ -83,6 +85,8 @@ class XBeeDevice:
         e = threading.Event()
         fid = struct.pack("B", self._next_frame_id)
         self._pending[fid] = e
+        
+        e.fid = fid
         
         pkt=dict(kwargs)
         pkt['id'] = cmd
