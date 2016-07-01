@@ -43,7 +43,9 @@ class LinkedXbeeServer():
     def address(self):
         return self.xbee.address
     def _rx(self, xbee, source, data):
-        # handle magic packets to discover the base station        
+        # handle magic packets to discover the base station       
+        
+         
         if data == b'HELLOREMOTE':
             self._remote_addr = source
         elif self._basestation and data == b'HELLOBASESTATION':

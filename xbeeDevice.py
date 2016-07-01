@@ -95,8 +95,8 @@ class XBeeDevice:
     def _on_error(self, error):
         self.log.warn('Failed with: {}'.format(str(error)))
     def _on_rx(self, pkt):
-        self.log.debug("xbee rx [{:x}, {}]: {}".format(self.address, pkt['id'], pkt))            
-
+        self.log.debug("xbee rx [{:x}, {}]: {}".format(self.address, pkt['id']), pkt)            
+                    
         if 'frame_id' in pkt and pkt['frame_id'] in self._pending:
             self._pending[pkt['frame_id']].pkt = pkt
             self._pending[pkt['frame_id']].set()
@@ -115,10 +115,17 @@ class XBeeDevice:
                 self.address = (0xffffffff00000000 & self.address) | (struct.unpack('>L', pkt['parameter'])[0]) 
             elif pkt['command'] == b'SH':
                 self.address = (0x00000000ffffffff & self.address) | (struct.unpack('>L', pkt['parameter'])[0] << 32)
+            elif pkt['command'] == b'DB':
+                self.log.info("RSSI -{}dBm".format(pkt['parameter'][0] ))
+                
         if pkt['id'] == 'rx':
+            # poll rssi
+            self.send_cmd("at", command=b'DB')
+            
             self._rxcallback(self, 
                              struct.unpack(">Q", pkt['source_addr'])[0], 
                              pkt['rf_data'])
+            
         
         if len(self._pending) == 0:
             self._idle.set()
