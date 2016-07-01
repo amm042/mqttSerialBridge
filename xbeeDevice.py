@@ -7,6 +7,7 @@ import logging
 import struct
 import datetime
 from xb900hp import XBee900HP
+import traceback
 class XBeeDied(Exception): pass
 
 class XBeeDevice:
@@ -94,8 +95,9 @@ class XBeeDevice:
         
     def _on_error(self, error):
         self.log.warn('Failed with: {}'.format(str(error)))
+        self.log.warn(traceback.format_exc())
     def _on_rx(self, pkt):
-        self.log.debug("xbee rx [{:x}, {}]: {}".format(self.address, pkt['id']), pkt)            
+        self.log.debug("xbee rx [{:x}, {}]: {}".format(self.address, pkt['id'], pkt))            
                     
         if 'frame_id' in pkt and pkt['frame_id'] in self._pending:
             self._pending[pkt['frame_id']].pkt = pkt
