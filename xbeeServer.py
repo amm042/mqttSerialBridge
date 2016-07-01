@@ -94,7 +94,15 @@ class LinkedXbeeServer():
                                                                 data))
             
             for f in frag.make_frags(data):                
-                self.xbee.sendwait(f, dest=self._remote_addr)
+                tries = 0
+                success= False
+                while tries < 3 and success == False:
+                    try:                            
+                        p = self.xbee.sendwait(f, dest=self._remote_addr)
+                        success = 'status' in p and p['status'] == b'\x00'
+                    except TimeoutError:
+                        self.LOG.warn("timeout sending message, retry")
+                    tries += 1
             
         else:
             self.LOG.debug("tx [{}, cr={}] bytes WITHOUT REMOTE: {}".format(len(data),ratio,                                                                                                        
