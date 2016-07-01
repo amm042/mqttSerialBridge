@@ -41,7 +41,7 @@ class XBeeDevice:
         if not self._idle.wait(self._timeout.total_seconds()):
             self._timeout_err_cnt += 1
             if self._timeout_err_cnt > XBeeDevice.MAX_TIMEOUTS:
-                raise XBeeDied()
+                raise XBeeDied("flush with too many timeouts")
             raise TimeoutError("Flush timeout.")
         self._timeout_err_cnt = 0
         
@@ -57,7 +57,7 @@ class XBeeDevice:
         if not e.wait(timeout):
             self._timeout_err_cnt += 1
             if self._timeout_err_cnt > XBeeDevice.MAX_TIMEOUTS:
-                raise XBeeDied()
+                raise XBeeDied("sendwait too many timeouts")
             raise TimeoutError("Timeout sending message")
         self._timeout_err_cnt = 0
         return e.pkt
