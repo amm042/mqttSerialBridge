@@ -271,6 +271,8 @@ class Link():
             except Exception as x:
                 self.LOG.critical("Remote link failed with: {}".format(x))
                 self.link.shutdown()    
+                self.thread.join()
+                self.LOG.critical("Thread stopped")
         else:
             self.LOG.error("cannot proxy data without remote.")
     
