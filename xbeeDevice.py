@@ -74,7 +74,11 @@ class XBeeDevice:
                 if self._timeout_err_cnt > XBeeDevice.MAX_TIMEOUTS:
                     raise XBeeDied("sendwait too many timeouts")
                 
-                del self._pending[e.fid]
+                if e.fid in self._pending:
+                    del self._pending[e.fid]
+                else:
+                    self.log.error("sendwait timeout, but no matching frame id {}".format(e.fid))
+                    
                 raise TimeoutError("Timeout sending message")
             finally:
                 self._lock.release()                
