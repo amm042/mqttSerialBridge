@@ -1,12 +1,15 @@
 import sProxy
 import logging
+import logging.handlers
 import pidfile
 import os.path
 import sys
-logfile = "/var/log/"+ os.path.splitext(sys.argv[0])[0] + ".log"
+
+logfile = os.path.splitext(sys.argv[0])[0] + ".log"
 
 logging.basicConfig(level=logging.INFO,
-                    handlers=(logging.handlers.RotatingFileHandler(logfile,
+                    handlers=(logging.StreamHandler(sys.stdout),
+                              logging.handlers.RotatingFileHandler(logfile,
                                                                     maxBytes = 256*1024,
                                                                     backupCount = 6), ),
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')

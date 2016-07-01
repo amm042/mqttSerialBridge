@@ -310,7 +310,7 @@ class SProxy:
             if timeout != None:
                 time.sleep(timeout)
             else:
-                while self.thread.is_alive():
+                while self.local.thread.is_alive() and self.remote.thread.is_alive():
                     time.sleep(1)
 
         
