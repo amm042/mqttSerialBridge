@@ -7,6 +7,7 @@ import socketserver
 import time
 import select
 import socket
+import traceback
 from socketserver import ThreadingTCPServer
 from xbeeServer import LinkedXbeeServer
 
@@ -270,7 +271,8 @@ class Link():
                 self.remote.write(data)
             except Exception as x:
                 self.LOG.critical("Remote link failed with: {}".format(x))
-                self.link.shutdown()    
+                self.LOG.critical(traceback.format_exc())
+                self.link.shutdown()
                 self.thread.join()
                 self.LOG.critical("Thread stopped")
         else:
