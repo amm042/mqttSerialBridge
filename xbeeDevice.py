@@ -89,11 +89,11 @@ class XBeeDevice:
             
         if pkt['id'] == 'tx_status':
             if pkt['status'] != b'\x00':
-                s = struct.unpack("B", pkt['status'])
+                s = pkt['status']
                 if s in XBee900HP.tx_status_strings:
                     self.log.warn("unsuccessful tx: {}", XBee900HP.tx_status_strings[s])
                 else:
-                    self.log.warn("unsuccessful tx: 0x{:x}", s)
+                    self.log.warn("unsuccessful tx: {}".format(s))
                     
         if pkt['id'] == 'at_response':                                               
             if pkt['command'] == b'SL':
