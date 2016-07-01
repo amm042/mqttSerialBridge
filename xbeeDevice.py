@@ -41,6 +41,11 @@ class XBeeDevice:
     def flush(self):
         if not self._idle.wait(self._timeout.total_seconds()):
             self._timeout_err_cnt += 1
+            
+            # drop anything we migth be waiting for
+            self._pending = {}
+            self._idle.set()
+            
             if self._timeout_err_cnt > XBeeDevice.MAX_TIMEOUTS:
                 raise XBeeDied("flush with too many timeouts")
             raise TimeoutError("Flush timeout.")

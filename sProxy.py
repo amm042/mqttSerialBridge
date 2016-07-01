@@ -312,9 +312,7 @@ class SProxy:
     def run(self, timeout=None):
         'everything is done in the background, just sleep the main thread'
         if self._running:
-            self.LOG.info("Proxy server is running.")
-            
-            
+            self.LOG.info("Proxy server is running.")                    
             
             if timeout != None:
                 time.sleep(timeout)
