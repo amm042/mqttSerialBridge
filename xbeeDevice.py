@@ -30,6 +30,8 @@ class XBeeDevice:
         self._max_packets = 3
         self._timeout = datetime.timedelta(seconds=5)        
         self._pending = {}
+        self._lock = threading.Lock()
+        
         self._timeout_err_cnt = 0
         self._idle = threading.Event()
         self.address = 0
@@ -40,15 +42,20 @@ class XBeeDevice:
         
     def flush(self):
         if not self._idle.wait(self._timeout.total_seconds()):
-            self._timeout_err_cnt += 1
             
-            # drop anything we migth be waiting for
-            self._pending = {}
-            self._idle.set()
-            
-            if self._timeout_err_cnt > XBeeDevice.MAX_TIMEOUTS:
-                raise XBeeDied("flush with too many timeouts")
-            raise TimeoutError("Flush timeout.")
+            try:
+                self._lock.acquire()
+                self._timeout_err_cnt += 1
+                
+                # drop anything we migth be waiting for
+                self._pending = {}
+                self._idle.set()
+                
+                if self._timeout_err_cnt > XBeeDevice.MAX_TIMEOUTS:
+                    raise XBeeDied("flush with too many timeouts")
+                raise TimeoutError("Flush timeout.")
+            finally:
+                self._lock.release()
         self._timeout_err_cnt = 0
         
     def sendwait(self, data, timeout = None, **kwargs):
@@ -61,12 +68,16 @@ class XBeeDevice:
         if timeout == None:
             timeout = self._timeout.total_seconds()
         if not e.wait(timeout):
-            self._timeout_err_cnt += 1
-            if self._timeout_err_cnt > XBeeDevice.MAX_TIMEOUTS:
-                raise XBeeDied("sendwait too many timeouts")
-            
-            del self._pending[e.fid]
-            raise TimeoutError("Timeout sending message")
+            try:
+                self._lock.acquire()
+                self._timeout_err_cnt += 1
+                if self._timeout_err_cnt > XBeeDevice.MAX_TIMEOUTS:
+                    raise XBeeDied("sendwait too many timeouts")
+                
+                del self._pending[e.fid]
+                raise TimeoutError("Timeout sending message")
+            finally:
+                self._lock.release()                
         self._timeout_err_cnt = 0
         return e.pkt
         
@@ -84,8 +95,13 @@ class XBeeDevice:
         self._idle.clear()           
         e = threading.Event()
         fid = struct.pack("B", self._next_frame_id)
-        self._pending[fid] = e
         
+        try:
+            self._lock.acquire()
+            self._pending[fid] = e
+        finally:
+            self._lock.release()
+            
         e.fid = fid
         
         pkt=dict(kwargs)
@@ -107,12 +123,20 @@ class XBeeDevice:
         self.log.warn(traceback.format_exc())
     def _on_rx(self, pkt):
         self.log.debug("xbee rx [{:x}, {}]: {}".format(self.address, pkt['id'], pkt))            
-                    
-        if 'frame_id' in pkt and pkt['frame_id'] in self._pending:
-            self._pending[pkt['frame_id']].pkt = pkt
-            self._pending[pkt['frame_id']].set()
-            del self._pending[pkt['frame_id']]
+        
+        try:
+            self._lock.acquire()
             
+            if 'frame_id' in pkt and pkt['frame_id'] in self._pending:
+                self._pending[pkt['frame_id']].pkt = pkt
+                self._pending[pkt['frame_id']].set()
+                del self._pending[pkt['frame_id']]
+            
+            if len(self._pending) == 0:
+                self._idle.set()                
+        finally:
+            self._lock.release()
+                        
         if pkt['id'] == 'tx_status':
             if pkt['status'] != b'\x00':
                 s = pkt['status']
@@ -135,11 +159,8 @@ class XBeeDevice:
             
             self._rxcallback(self, 
                              struct.unpack(">Q", pkt['source_addr'])[0], 
-                             pkt['rf_data'])
-            
-        
-        if len(self._pending) == 0:
-            self._idle.set()
+                             pkt['rf_data'])                
+
         
     def close(self):
         self._xbee.halt()
