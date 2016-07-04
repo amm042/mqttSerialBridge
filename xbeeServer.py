@@ -90,10 +90,19 @@ class LinkedXbeeServer():
         ilen = len(data)
         data = zlib.compress(data)
         ratio = len(data)/float(ilen)
-        if self._remote_addr!= None:
+        tries = 0
+        while self._basestation == False and self._remote_addr == None and tries < 5:
+            self.xbee.sendwait(b"HELLOBASESTATION", dest=0xffff)
+                    
+        if self._remote_addr == None:
+            self.LOG.warn("tx FAILED, NO REMOTE [{}, cr={}] bytes to {:x}: {}".format(len(data),ratio,
+                                                            self._remote_addr,                                                    
+                                                            data))
+        else:            
             self.LOG.debug("tx [{}, cr={}] bytes to {:x}: {}".format(len(data),ratio,
                                                                 self._remote_addr,                                                    
                                                                 data))
+                                            
             
             for f in frag.make_frags(data):                
                 tries = 0
@@ -107,9 +116,5 @@ class LinkedXbeeServer():
                     tries += 1
                 if success == False:
                     break
-            
-        else:
-            self.LOG.debug("tx [{}, cr={}] bytes WITHOUT REMOTE: {}".format(len(data),ratio,                                                                                                        
-                                                    data))
-                        
+                    
                         

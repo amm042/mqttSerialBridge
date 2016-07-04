@@ -46,7 +46,11 @@ class LinkedThreadingTCPServer(socketserver.ThreadingTCPServer):
         self.link = link
         self.LOG = logging.getLogger(__name__)
         self.clients = []
-        
+    
+    
+    def is_alive(self):
+        return self.__is_shut_down.is_set() == False
+    
     def write(self, data):
         if len(self.clients) == 0:
             self.LOG.warn("tx [{}] bytes FAILS WITHOUT CLIENT: {}".format(len(data),                                                                                                    
@@ -68,8 +72,11 @@ class ProxyTCPClient():
         self.link = link
         
         self.LOG.info("TCPClient Link to {}".format(server_address))
-        self.socket = None                
+        self.socket = None
         
+    def is_alive(self):
+        return self.socket != None and self.__is_shut_down.is_set() == False
+    
     def serve_forever(self, poll_interval=0.5):
         """Handle one request at a time until shutdown.
 
@@ -164,6 +171,9 @@ class LinkedProxySerialServer():
         
         self.LOG = logging.getLogger(__name__)
         self.LOG.debug("created.")    
+    
+    def is_alive(self):
+        return self.serial != None and self.__is_shut_down.is_set() == False
     
     def serve_forever(self, poll_interval=0.5):
         """Handle one request at a time until shutdown.
@@ -260,11 +270,16 @@ class Link():
         self.thread = threading.Thread(name='LinkServer@{}'.format(url), target=self.link.serve_forever)
         self.thread.setDaemon(True)
         self.thread.start()
+        
+    def is_alive(self):
+        return self.link.is_alive()
+
     def bind (self, other):
         '''bind this link to another link, 
             data received on this link will be written to the other        
         '''
         self.remote = other
+        
     def proxy(self, data):
         if self.remote:
             try:           
