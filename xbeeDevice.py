@@ -14,17 +14,11 @@ class XBeeDevice:
     MAX_TIMEOUTS = 6
     
     def __init__(self, portstr, rxcallback):
-        dev, baud, opts = portstr.split(":")
+        
+        self._portstr = portstr
+        
         self.log = logging.getLogger(__name__)
         
-        self.log.debug("Opening serial: " + portstr)
-        self._serial = serial.Serial(dev, baudrate=int(baud), 
-                                     bytesize=int(opts[0]),
-                                     parity=opts[1],
-                                     stopbits=int(opts[2]))
-        self._xbee = XBee900HP(self._serial, escaped=True,
-                          callback=self._on_rx,
-                          error_callback = self._on_error)
         self._rxcallback = rxcallback
         self._next_frame_id = 1    
         self._max_packets = 3
@@ -34,7 +28,20 @@ class XBeeDevice:
         
         self._timeout_err_cnt = 0
         self._idle = threading.Event()
-        self.address = 0
+        self.address = 0        
+        self._mkxbee()
+        
+    def _mkxbee(self):
+        self.log.debug("Opening serial: " + self._portstr)
+        dev, baud, opts = self._portstr.split(":")
+        self._serial = serial.Serial(dev, baudrate=int(baud), 
+                                     bytesize=int(opts[0]),
+                                     parity=opts[1],
+                                     stopbits=int(opts[2]))
+        self._xbee = XBee900HP(self._serial, escaped=True,
+                          callback=self._on_rx,
+                          error_callback = self._on_error)
+
         self.send_cmd("at", command=b'TO', parameter=b'\x40')
         self.send_cmd("at", command=b'SL')
         self.send_cmd("at", command=b'SH')
@@ -125,6 +132,11 @@ class XBeeDevice:
     def _on_error(self, error):
         self.log.warn('Failed with: {}'.format(str(error)))
         self.log.warn(traceback.format_exc())
+        self._serial.close()
+        self._xbee = None
+        self._serial = None
+        self._mkxbee()        
+        
     def _on_rx(self, pkt):
         self.log.debug("xbee rx [{:x}, {}]: {}".format(self.address, pkt['id'], pkt))            
         
