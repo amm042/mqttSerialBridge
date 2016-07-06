@@ -13,6 +13,8 @@ xb = xbeeDevice.XBeeDevice('/dev/ttyUSB0:38400:8N1', rx)
 
 try:
     xb.send_cmd("at", command=b'PL', parameter = b'\x00')
+    xb.send_cmd("at", command=b'HP', parameter = b'\x03')
+    xb.send_cmd("at", command=b'ID', parameter = b'\x33\x33')
     while True:
         print("TX [{:x}]: PING".format(0xffff))
         xb.send(b'PING', dest = 0xffff)

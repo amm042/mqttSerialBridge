@@ -24,18 +24,21 @@ class XBeeDevice:
         self._next_frame_id = 1    
         self._max_packets = 3
         self._timeout = datetime.timedelta(seconds=5)        
-        self._pending = {}
-        
-        self._lock = threading.Lock()
-        
-        self._timeout_err_cnt = 0
-        self._idle = threading.Event()
+
         self.address = 0        
         self._mkxbee()
         
         
         
     def _mkxbee(self):
+        
+        self._pending = {}  
+        
+        self._lock = threading.Lock()
+        
+        self._timeout_err_cnt = 0
+        self._idle = threading.Event()
+        
         self.log.debug("Opening serial: " + self._portstr)
         dev, baud, opts = self._portstr.split(":")
         self._serial = serial.Serial(dev, baudrate=int(baud), 
@@ -46,6 +49,7 @@ class XBeeDevice:
                           callback=self._on_rx,
                           error_callback = self._on_error)
 
+        # point to multipoint
         self.send_cmd("at", command=b'TO', parameter=b'\x40')
         self.send_cmd("at", command=b'SL')
         self.send_cmd("at", command=b'SH')
@@ -177,7 +181,12 @@ class XBeeDevice:
                 
                 self.rssi_history.pop()
                 self.rssi_history.append(-pkt['parameter'][0])
-                
+            elif pkt['command'] == b'FN':
+                self.log.info("Neighbor info: {}".format(pkt['rf_data'].decode('utf-8')))
+            elif pkt['command'] == b'ND':
+                self.log.info("Network info: {}".format(pkt['rf_data'].decode('utf-8')))
+            else:
+                self.log.warn("Unsupported command response: {}:{}".format(pkt['command'], pkt))
         if pkt['id'] == 'rx':
             # poll rssi
             self.send_cmd("at", command=b'DB')
