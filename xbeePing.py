@@ -18,7 +18,7 @@ try:
     xb.send_cmd("at", command=b'ID', parameter = b'\x33\x33')
     
     # channel mask for dana roof from scanning
-    xb.send_cmd("at", command=b'CM', parameter=struct.pack(">Q", 0x0000fba000000000))
+    xb.send_cmd("at", command=b'CM', parameter=struct.pack(">Q", 0xffffffc000000000))
     xb.send_cmd("at", command=b'CM')
     time.sleep(0.5)
     xb.send_cmd("at", command=b'ED')
