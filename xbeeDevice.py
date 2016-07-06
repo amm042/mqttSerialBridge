@@ -240,8 +240,9 @@ class XBeeDevice:
                 if 'parameter' in pkt:
                     self._channel_cache ={}
                     self._channel_mask = int("".join(["{:02x}".format(i) for i in pkt['parameter']]),16)
+                    self.log.info("Channel mask is {:x}".format(self._channel_mask))
             elif pkt['command'] == b'ED':
-                print ("got ED")
+                
                 for i,d in enumerate(pkt['parameter']):
                     self.log.info("Energy info [{:02d} = {:3.2f} MHz]: -{}dBm".format(i, self.channel_to_freq(i), d))
                     
