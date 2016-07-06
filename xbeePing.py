@@ -1,5 +1,6 @@
 import xbeeDevice
 import time
+import struct
 import logging
 logging.basicConfig(level=logging.INFO)
 
