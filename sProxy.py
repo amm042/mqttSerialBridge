@@ -56,12 +56,23 @@ class LinkedThreadingTCPServer(socketserver.ThreadingTCPServer):
             self.LOG.warn("tx [{}] bytes FAILS WITHOUT CLIENT: {}".format(len(data),                                                                                                    
                                                     data))
         else:
+            
+            broken = []
             for c in self.clients:
                 self.LOG.debug("tx [{}] bytes to {}: {}".format(len(data),
                                                             c.client_address[0],                                                    
                                                             data))
                 # todo, wrap this in try-catch and remove dead clients...
-                c.request.send(data)
+                try:
+                    c.request.send(data)
+                except BrokenPipeError as x:
+                    broken.append( (c,x) )
+                    
+            for c,e in broken:
+                self.LOG.debug("remove tcp client {}: {}".format(c, e))
+                self.clients.remove(c)
+                    
+                        
 class ProxyTCPClient():
     def __init__(self, server_address, link):
         self.LOG = logging.getLogger(__name__)
