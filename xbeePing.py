@@ -2,7 +2,7 @@ import xbeeDevice
 import time
 import struct
 import logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 def rx(dev, src, data):
     
