@@ -23,17 +23,16 @@ def print_info():
     print(80*"-")
     cm = sorted(dat.items(), key=lambda x: numpy.mean(x[1]), reverse = True)
     
-    for freq, dbms in cm:
-         
+    for freq, dbms in cm:         
         print ("{:03.2f} MHz = -{:3.2f} +- {:3.2f} dBm".format(freq, numpy.mean(dbms), numpy.std(dbms)))
         
-    
-    
     mask = 0
-    for freq, dbms in cm[:25]:
+    f = []
+    for freq, dbms in cm[:26]:
+        f.append(freq)
         mask |= xb.freq_to_maskbit(freq)
     
-    print ("Best channel mask: {:016x}: ".format(mask))
+    print ("Best channel mask: {:016x}: {}".format(mask, f))
     
     print(80*"-")
                 

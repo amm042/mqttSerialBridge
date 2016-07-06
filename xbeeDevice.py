@@ -221,7 +221,10 @@ class XBeeDevice:
                 else:
                     self.log.warn("unsuccessful tx: {}".format(s))
                     
-        if pkt['id'] == 'at_response':                                               
+        if pkt['id'] == 'at_response':   
+            if 'status' in pkt and pkt['status'] > b'\x00':
+                self.log.warn("At command failed: {}".format(pkt))
+                                                            
             if pkt['command'] == b'SL':
                 self.address = (0xffffffff00000000 & self.address) | (struct.unpack('>L', pkt['parameter'])[0]) 
             elif pkt['command'] == b'SH':
@@ -241,8 +244,7 @@ class XBeeDevice:
                     self._channel_cache ={}
                     self._channel_mask = int("".join(["{:02x}".format(i) for i in pkt['parameter']]),16)
                     self.log.info("Channel mask is {:x}".format(self._channel_mask))
-            elif pkt['command'] == b'ED':
-                
+            elif pkt['command'] == b'ED':                
                 for i,d in enumerate(pkt['parameter']):
                     self.log.info("Energy info [{:02d} = {:3.2f} MHz]: -{}dBm".format(i, self.channel_to_freq(i), d))
                     
