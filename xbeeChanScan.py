@@ -19,12 +19,15 @@ def print_info():
     global dat
     global xb
     
+    
     print(80*"-")
-    for i, d in enumerate(dat.items()):
-        freq, dbms = d 
-        print ("ch{:02d}, {:03.2f} MHz = -{:3.2f} +- {:3.2f} dBm".format(i, freq, numpy.mean(dbms), numpy.std(dbms)))
-        
     cm = sorted(dat.items(), key=lambda x: numpy.mean(x[1]))
+    
+    for freq, dbms in cm:
+         
+        print ("{:03.2f} MHz = -{:3.2f} +- {:3.2f} dBm".format(freq, numpy.mean(dbms), numpy.std(dbms)))
+        
+    
     
     mask = 0
     for freq, dbms in cm[:25]:
