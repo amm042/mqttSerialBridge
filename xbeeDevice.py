@@ -18,18 +18,22 @@ class XBeeDevice:
         self._portstr = portstr
         
         self.log = logging.getLogger(__name__)
+        self.rssi_history = 10*[0]
         
         self._rxcallback = rxcallback
         self._next_frame_id = 1    
         self._max_packets = 3
         self._timeout = datetime.timedelta(seconds=5)        
         self._pending = {}
+        
         self._lock = threading.Lock()
         
         self._timeout_err_cnt = 0
         self._idle = threading.Event()
         self.address = 0        
         self._mkxbee()
+        
+        
         
     def _mkxbee(self):
         self.log.debug("Opening serial: " + self._portstr)
@@ -135,7 +139,9 @@ class XBeeDevice:
         self._serial.close()
         self._xbee = None
         self._serial = None
+        
         self._mkxbee()        
+                
         
     def _on_rx(self, pkt):
         self.log.debug("xbee rx [{:x}, {}]: {}".format(self.address, pkt['id'], pkt))            
@@ -169,10 +175,13 @@ class XBeeDevice:
             elif pkt['command'] == b'DB':
                 self.log.info("RSSI -{}dBm".format(pkt['parameter'][0] ))
                 
+                self.rssi_history.pop()
+                self.rssi_history.append(-pkt['parameter'][0])
+                
         if pkt['id'] == 'rx':
             # poll rssi
             self.send_cmd("at", command=b'DB')
-            
+                        
             self._rxcallback(self, 
                              struct.unpack(">Q", pkt['source_addr'])[0], 
                              pkt['rf_data'])                
@@ -181,3 +190,5 @@ class XBeeDevice:
     def close(self):
         self._xbee.halt()
         self._serial.close()
+        
+        
