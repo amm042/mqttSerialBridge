@@ -8,6 +8,7 @@ import struct
 import datetime
 from xb900hp import XBee900HP
 import traceback
+
 class XBeeDied(Exception): pass
 
 class XBeeDevice:
@@ -39,6 +40,10 @@ class XBeeDevice:
         self._timeout_err_cnt = 0
         self._idle = threading.Event()
         
+        
+        self._channel_mask = 0
+        self._channel_cache= {}
+        
         self.log.debug("Opening serial: " + self._portstr)
         dev, baud, opts = self._portstr.split(":")
         self._serial = serial.Serial(dev, baudrate=int(baud), 
@@ -51,6 +56,7 @@ class XBeeDevice:
 
         # point to multipoint
         self.send_cmd("at", command=b'TO', parameter=b'\x40')
+        self.send_cmd("at", command=b'CM')
         self.send_cmd("at", command=b'SL')
         self.send_cmd("at", command=b'SH')
         self.flush()
@@ -146,6 +152,36 @@ class XBeeDevice:
         
         self._mkxbee()        
                 
+    def channel_to_freq(self, i):
+                
+        if i in self._channel_cache:
+            return self._channel_cache[i]
+        
+        # return the ith enabled bit in the channel mask
+        freq = 902.4
+        step = 0.4
+        cm = self._channel_mask
+        cnt = 0
+                
+        # find first freq
+        while cm & 0x1 == 0x0:            
+            freq+=step
+            cm >>= 1
+
+        self._channel_cache[cnt] = freq
+        
+        while i > 0:
+            cnt += 1            
+            i-=1
+            freq+=step
+            cm >>= 1
+            # check if new channel is disabled
+            while cm & 0x1 == 0x0:                
+                freq+=step
+                cm >>= 1
+            self._channel_cache[cnt] = freq
+        
+        return freq
         
     def _on_rx(self, pkt):
         self.log.debug("xbee rx [{:x}, {}]: {}".format(self.address, pkt['id'], pkt))            
@@ -185,10 +221,15 @@ class XBeeDevice:
                 self.log.info("Neighbor info: {}".format(pkt['rf_data'].decode('utf-8')))
             elif pkt['command'] == b'ND':
                 self.log.info("Network info: {}".format(pkt['rf_data'].decode('utf-8')))
+            elif pkt['command'] == b'CM':
+                # mask is sent as a hex string of varying length....
+                if 'parameter' in pkt:
+                    self._channel_cache ={}
+                    self._channel_mask = int("".join(["{:02x}".format(i) for i in pkt['parameter']]),16)
             elif pkt['command'] == b'ED':
                 print ("got ED")
                 for i,d in enumerate(pkt['parameter']):
-                    self.log.info("Energy info [{:02d}]: -{}dBm".format(i, d))
+                    self.log.info("Energy info [{:02d} = {:3.2f} MHz]: -{}dBm".format(i, self.channel_to_freq(i), d))
             else:
                 self.log.warn("Unsupported command response: {}:{}".format(pkt['command'], pkt))
         if pkt['id'] == 'rx':

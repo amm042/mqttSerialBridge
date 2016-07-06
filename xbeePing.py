@@ -5,7 +5,7 @@ logging.basicConfig(level=logging.INFO)
 
 def rx(dev, src, data):
     
-    print("RX: [{:x}, {}dBm]: {}".format(src, dev.rssi_history[-1], data))
+    print("RX [{:x}, {}dBm]: {}".format(src, dev.rssi_history[-1], data))
     
     xb.send(b'PONG', dest = src)
     print("TX [{:x}]: PONG ".format(src))
