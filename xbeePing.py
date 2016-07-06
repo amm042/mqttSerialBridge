@@ -7,8 +7,11 @@ def rx(data):
     
 xb = xbeeDevice.XBeeDevice('/dev/ttyUSB0:38400:8N1', rx)
 
-while True:
-    xb.send('PING', dest = 0xffff)
-    time.sleep(0.5)
+try:
+    while True:
+        print("TX: PING")
+        xb.send(b'PING', dest = 0xffff)
+        time.sleep(0.5)
     
-    
+finally:
+    xb.close()    
