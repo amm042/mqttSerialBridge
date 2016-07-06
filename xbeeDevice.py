@@ -185,6 +185,10 @@ class XBeeDevice:
                 self.log.info("Neighbor info: {}".format(pkt['rf_data'].decode('utf-8')))
             elif pkt['command'] == b'ND':
                 self.log.info("Network info: {}".format(pkt['rf_data'].decode('utf-8')))
+            elif pkt['command'] == b'ED':
+                print ("got ED")
+                for i,d in enumerate(pkt['parameter']):
+                    self.log.info("Energy info [{:02d}]: -{}dBm".format(i, d))
             else:
                 self.log.warn("Unsupported command response: {}:{}".format(pkt['command'], pkt))
         if pkt['id'] == 'rx':

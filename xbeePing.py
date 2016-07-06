@@ -1,7 +1,7 @@
 import xbeeDevice
 import time
 import logging
-#$logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 def rx(dev, src, data):
     
@@ -15,10 +15,17 @@ try:
     xb.send_cmd("at", command=b'PL', parameter = b'\x00')
     xb.send_cmd("at", command=b'HP', parameter = b'\x03')
     xb.send_cmd("at", command=b'ID', parameter = b'\x33\x33')
+    xb.send_cmd("at", command=b'ED')
     while True:
         print("TX [{:x}]: PING".format(0xffff))
         xb.send(b'PING', dest = 0xffff)
+        
+        
+        
         time.sleep(0.5)
+        
+        
+        
     
 finally:
     xb.close()    
