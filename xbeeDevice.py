@@ -27,6 +27,8 @@ class XBeeDevice:
         self._timeout = datetime.timedelta(seconds=5)        
 
         self.address = 0        
+        self.on_energy = None
+        
         self._mkxbee()
         
         
@@ -151,7 +153,19 @@ class XBeeDevice:
         self._serial = None
         
         self._mkxbee()        
-                
+    
+    def freq_to_maskbit(self, freq):
+        atfreq = 902.4
+        max = 920.8
+        step = 0.4        
+        i = 1
+        
+        while abs(atfreq - freq) > 0.01 and atfreq < max:
+             atfreq += step
+             i <<= 1
+             
+        return i
+        
     def channel_to_freq(self, i):
                 
         if i in self._channel_cache:
@@ -230,6 +244,9 @@ class XBeeDevice:
                 print ("got ED")
                 for i,d in enumerate(pkt['parameter']):
                     self.log.info("Energy info [{:02d} = {:3.2f} MHz]: -{}dBm".format(i, self.channel_to_freq(i), d))
+                    
+                if self.on_energy != None:
+                    self.on_energy (self, [(self.channel_to_freq(i), d) for i,d in enumerate(pkt['parameter'])])
             else:
                 self.log.warn("Unsupported command response: {}:{}".format(pkt['command'], pkt))
         if pkt['id'] == 'rx':
