@@ -12,6 +12,7 @@ def rx(dev, src, data):
 xb = xbeeDevice.XBeeDevice('/dev/ttyUSB0:38400:8N1', rx)
 
 try:
+    xb.send_cmd("at", command=b'PL', parameter = b'\x00')
     while True:
         print("TX [{:x}]: PING".format(0xffff))
         xb.send(b'PING', dest = 0xffff)
