@@ -3,7 +3,7 @@ import time
 import logging
 import struct
 import numpy
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 def rx(dev, src, data):
     
@@ -29,8 +29,13 @@ def print_info():
     mask = 0
     f = []
     for freq, dbms in cm[:26]:
+        if freq in f:
+            print ("Freq already in mask! {}".format(freq))
         f.append(freq)
-        mask |= xb.freq_to_maskbit(freq)
+        bit = xb.freq_to_maskbit(freq)
+        if mask & bit == bit:
+            print ("Bit already in mask! {}: {} in {}".format(freq, bit, mask ))
+        mask |= bit 
     
     print ("Best channel mask: {:016x}: {}".format(mask, f))
     

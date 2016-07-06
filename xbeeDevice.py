@@ -156,8 +156,9 @@ class XBeeDevice:
     
     def freq_to_maskbit(self, freq):
         atfreq = 902.4
-        max = 920.8
-        step = 0.4        
+        
+        step = 0.4
+        max = atfreq + step * 64        
         i = 1
         
         while abs(atfreq - freq) > 0.01 and atfreq < max:
