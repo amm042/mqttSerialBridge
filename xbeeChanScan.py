@@ -21,7 +21,7 @@ def print_info():
     
     
     print(80*"-")
-    cm = sorted(dat.items(), key=lambda x: numpy.mean(x[1]))
+    cm = sorted(dat.items(), key=lambda x: numpy.mean(x[1]), reverse = True)
     
     for freq, dbms in cm:
          
