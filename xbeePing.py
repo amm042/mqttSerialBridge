@@ -19,6 +19,8 @@ try:
     
     # channel mask for dana roof from scanning
     xb.send_cmd("at", command=b'CM', parameter=struct.pack(">Q", 0x0000fba000000000))
+    xb.send_cmd("at", command=b'CM')
+    time.sleep(0.5)
     xb.send_cmd("at", command=b'ED')
     while True:
         print("TX [{:x}]: PING".format(0xffff))
