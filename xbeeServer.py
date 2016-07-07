@@ -4,7 +4,7 @@ import threading
 import queue
 import zlib
 import fragmentation as frag
-
+import datetime
 
 class LinkedXbeeServer():
     'like socketserver.BaseServer but for XBee API links'
@@ -31,6 +31,8 @@ class LinkedXbeeServer():
         self.__is_shut_down = threading.Event()
         self.__shutdown_request = False
         
+        self._last_write = datetime.datetime.now()
+                
         self.LOG = logging.getLogger(__name__)
         self.LOG.debug("created.")    
     
@@ -91,6 +93,13 @@ class LinkedXbeeServer():
         data = zlib.compress(data)
         ratio = len(data)/float(ilen)
         tries = 0
+                
+        # throttle tx so we don't break the link, wait about how long it takes to tx one packet
+        now = datetime.datetime.now()            
+        if now - self._last_write < self.xbee._last_sendwait_length:
+            time.sleep((self.xbee._last_sendwait_length - (now - self._last_write)).total_seconds())
+        self._last_write = now
+                
         while self._basestation == False and self._remote_addr == None and tries < 5:
             self.xbee.sendwait(b"HELLOBASESTATION", dest=0xffff)
                     
@@ -101,8 +110,7 @@ class LinkedXbeeServer():
         else:            
             self.LOG.debug("tx [{}, cr={}] bytes to {:x}: {}".format(len(data),ratio,
                                                                 self._remote_addr,                                                    
-                                                                data))
-                                            
+                                                                data))                                            
             
             for f in frag.make_frags(data):                
                 tries = 0
