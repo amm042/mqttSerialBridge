@@ -23,6 +23,7 @@ class LinkedXbeeServer():
                 self.xbee.sendwait(b"HELLOBASESTATION", dest=0xffff)
                     
             if self._remote_addr == None:
+                self.xbee.close()
                 raise Exception("No remote basestation could be found.")
         
         self.link = link        

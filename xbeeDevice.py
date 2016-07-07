@@ -28,6 +28,8 @@ class XBeeDevice:
         
         self._lock = threading.Lock()
         
+        # initialize to something reasonable
+        self._last_sendwait_length = datetime.timedelta(seconds=1)
         self._timeout_err_cnt = 0
         self._idle = threading.Event()
         self.address = 0        
@@ -72,6 +74,8 @@ class XBeeDevice:
     def sendwait(self, data, timeout = None, **kwargs):
         'send the message and wait for the result'
         
+        begin = datetime.datetime.now()
+        
         # may raise timeouterror     
         self.flush()
                               
@@ -94,6 +98,8 @@ class XBeeDevice:
             finally:
                 self._lock.release()                
         self._timeout_err_cnt = 0
+        end = datetime.datetime.now()
+        self._last_sendwait_length = end-begin
         return e.pkt
         
     def send(self, data, dest= 0xffff):
