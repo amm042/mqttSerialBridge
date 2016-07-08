@@ -5,6 +5,7 @@ import struct
 import logging
 import random
 import os
+import sys
 #logging.basicConfig(level=logging.INFO)
 
 logfile =  os.path.splitext(sys.argv[0])[0] + ".log"
