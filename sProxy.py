@@ -238,24 +238,26 @@ class Link():
         "url in the form tcpserver:0.0.0.0:port or /dev/ttyUSB:9600:8N1"
         args = url.split(":")
         self.remote = None
+        self.name = "Link"
         self.LOG = logging.getLogger(__name__) 
         if args[0] == 'tcpserver':
             host = args[1]
             port = int(args[2])
             
-            socketserver.allow_reuse_address = True            
+            socketserver.allow_reuse_address = True
+            LinkedThreadingTCPServer.daemon_threads = True            
             self.link = LinkedThreadingTCPServer((host,port), TCPServerHandler, self)                        
             self.link.daemon_threads = True
-            
-            self.LOG.info("Started LinkTCP server on {}:{}".format(host, port))
+            self.name = "LinkTCP server on {}:{}".format(host,port)
+            self.LOG.info("Started {}".format(self.name))
         elif args[0] == 'tcpclient':
             host = args[1]
             port = int(args[2])
                         
             self.link = ProxyTCPClient ((host,port), self)
             self.link.daemon_threads = True
-            
-            self.LOG.info("Started LinkTCP client on {}:{}".format(host, port))
+            self.name = "LinkTCP client on {}:{}".format(host,port)
+            self.LOG.info("Started {}".format(self.name))
         elif args[0] == 'serial':
             port = args[1]  
             baudrate = int(args[2])
@@ -264,7 +266,8 @@ class Link():
             stopbits = int(args[3][2])                   
         
             self.link = LinkedProxySerialServer( (port, baudrate, bytesize, parity, stopbits ), self)
-            self.LOG.info("Started LinkSerial server on {}".format(self.link.serial.portstr))
+            self.name = "LinkSerial server on {}".format(self.link.serial.portstr)
+            self.LOG.info("Started {}".format(self.name))
         elif args[0] == 'xbee':
             port = args[1]
             baudrate = int(args[2])
@@ -274,11 +277,12 @@ class Link():
             basestation = args[4].lower() == 'true'
             
             self.link = LinkedXbeeServer( (port, baudrate, bytesize, parity, stopbits, basestation ), self)
-            self.LOG.info("Started XBee server on rf address {:x}".format(self.link.address))                        
+            self.name = "XBee server on rf address {:x} [base={}]".format(self.link.address, basestation)
+            self.LOG.info("Started {}".format(self.name))
         else:
             raise NotImplementedError("url format not supported")
                         
-        self.thread = threading.Thread(name='LinkServer@{}'.format(url), target=self.link.serve_forever)
+        self.thread = threading.Thread(name='LinkServer-{}'.format(self.name), target=self.link.serve_forever)
         self.thread.setDaemon(True)
         self.thread.start()
         
@@ -307,6 +311,10 @@ class Link():
     def write(self, data):
         'write data to our link'        
         self.link.write(data)
+    def shutdown(self):
+        self.LOG.warn("Shutdown for {}".format(self.name))
+        self.link.shutdown()
+                
 class SProxy:    
     def __init__(self, local_url, remote_url):
         '''
@@ -323,13 +331,21 @@ class SProxy:
         self.remote = None
         try:
             self.local = Link(local_url)
+            
+        except Exception as x:
+            
+            self.LOG.error("Failed to create local link {}, shutting down.".format(local_url))
+                                        
+            raise x
+        
+        try:
             self.remote = Link(remote_url)
         except Exception as x:
-            if self.local != None:
-                self.local.link.shutdown()
-            if self.remote != None:
-                self.remote.link.shutdown()
-                
+            
+            self.LOG.error("Failed to create remote link {}, shutting down.".format(remote_url))
+                    
+            self.local.shutdown()
+                            
             raise x
 
         # bind the links together

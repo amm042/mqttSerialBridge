@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 import sProxy
 import logging
 import logging.handlers
