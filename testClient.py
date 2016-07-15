@@ -21,8 +21,8 @@ client.on_connect = on_connect
 client.on_message = on_message
 
 #client.connect_async("amm042", 9999, 60)
-#port = 1883
-port = 9999
+port = 1883
+#port = 9999
 if ( client.connect("localhost", port, 60) != mqtt.MQTT_ERR_SUCCESS ):
     print("Failed to connect.")
     exit(-1)
@@ -30,21 +30,22 @@ if ( client.connect("localhost", port, 60) != mqtt.MQTT_ERR_SUCCESS ):
 
 if len(sys.argv) > 1:
     cnt = int(sys.argv[1])
-    
+
 else:
     cnt = 16
-                                                            
+
 #client.connect("amm042", 9999, 60)
 client.loop_start()
+time.sleep(5)
 print("Sending {} messages".format(cnt))
 topic ='test/{}'.format(os.getpid())
 for i in range(cnt):
-    
+
     msg = 'the value is {} at {}'.format(i, datetime.datetime.now())
     print("pub: {} - {}".format(topic, msg))
     client.publish(topic, msg, qos=2)
     time.sleep(0.15)
-time.sleep(1)
+time.sleep(30)
 client.disconnect()
 time.sleep(1)
 client.loop_stop()
