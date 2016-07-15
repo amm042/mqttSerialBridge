@@ -2,3 +2,4 @@ hexdump==3.3
 paho-mqtt==1.1
 pyserial==3.1.1
 
+XBee==2.2.3
