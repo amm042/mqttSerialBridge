@@ -6,7 +6,7 @@ import time
 import logging
 import struct
 import datetime
-from xb900hp import XBee900HP
+
 import traceback
 
 class XBeeDied(Exception): pass
@@ -14,9 +14,11 @@ class XBeeDied(Exception): pass
 class XBeeDevice:
     MAX_TIMEOUTS = 6
     
-    def __init__(self, portstr, rxcallback):
+    def __init__(self, portstr, rxcallback, xbeeclass):
         
+        self._in_init = True
         self._portstr = portstr
+        self._xbeeclass = xbeeclass
         
         self.log = logging.getLogger(__name__)
         self.rssi_history = 10*[0]
@@ -26,11 +28,17 @@ class XBeeDevice:
         self._max_packets = 3
         self._timeout = datetime.timedelta(seconds=5)        
 
-        self.address = 0        
-        self.on_energy = None
+        self.address = 0     
+        self.mtu = None   
+        self.on_energy = None        
         
-        self._mkxbee()
+        try:
+            self._mkxbee()
+        except Exception as x:
+            self.close()
+            raise x
         
+        self._in_init = False
         
         
     def _mkxbee(self):
@@ -43,8 +51,7 @@ class XBeeDevice:
         self._last_sendwait_length = datetime.timedelta(seconds=1)
         self._timeout_err_cnt = 0
         self._idle = threading.Event()
-        
-        
+                
         self._channel_mask = 0
         self._channel_cache= {}
         
@@ -54,15 +61,25 @@ class XBeeDevice:
                                      bytesize=int(opts[0]),
                                      parity=opts[1],
                                      stopbits=int(opts[2]))
-        self._xbee = XBee900HP(self._serial, escaped=True,
+        self._xbee = self._xbeeclass(self._serial, escaped=True,
                           callback=self._on_rx,
                           error_callback = self._on_error)
+
+        self._addrlen=2
+        for part in self._xbee.api_commands['tx']:
+            if part['name'] == 'dest_addr':
+                self._addrlen = part['len']
 
         # point to multipoint
         self.send_cmd("at", command=b'TO', parameter=b'\x40')
         self.send_cmd("at", command=b'CM')
-        self.send_cmd("at", command=b'SL')
-        self.send_cmd("at", command=b'SH')
+        if self._addrlen == 2:
+            self.send_cmd("at", command=b"MY")
+        elif self._addrlen == 8:
+            self.send_cmd("at", command=b'SL')
+            self.send_cmd("at", command=b'SH')
+        
+        self.send_cmd("at", command=b'NP')
         self.flush()
         
     def flush(self):
@@ -83,7 +100,7 @@ class XBeeDevice:
                 self._lock.release()
         self._timeout_err_cnt = 0
         
-    def sendwait(self, data, timeout = None, **kwargs):
+    def sendwait(self, data=None, atcmd = 'tx', timeout = None, **kwargs):
         'send the message and wait for the result'
         
         begin = datetime.datetime.now()
@@ -91,7 +108,7 @@ class XBeeDevice:
         # may raise timeouterror     
         self.flush()
                               
-        e = self.send(data, **kwargs)
+        e = self.send(data=data, atcmd=atcmd, **kwargs)
         if timeout == None:
             timeout = self._timeout.total_seconds()
         if not e.wait(timeout):
@@ -114,9 +131,16 @@ class XBeeDevice:
         self._last_sendwait_length = end-begin
         return e.pkt
         
-    def send(self, data, dest= 0xffff):
+    def send(self, data=None, dest= 0xffff, atcmd='tx', **kwargs):
         'format and send a data packet, default to broadcast'
-        return self.send_cmd('tx', dest_addr=struct.pack(">Q", dest), data=data)
+                
+        if self._addrlen == 2:
+            return self.send_cmd(cmd=atcmd, dest_addr=struct.pack(">H", dest), data=data, **kwargs)
+        elif self._addrlen == 8:
+            return self.send_cmd(cmd=atcmd, dest_addr=struct.pack(">Q", dest), data=data, **kwargs)
+        else: 
+            raise Exception("Unsupported address length")
+               
         
     def send_cmd(self, cmd, **kwargs):
         begin = datetime.datetime.now()
@@ -158,7 +182,9 @@ class XBeeDevice:
         self._xbee = None
         self._serial = None
         
-        self._mkxbee()        
+        # reload xbee
+        if self._in_init == False:
+            self._mkxbee()
     
     def freq_to_maskbit(self, freq):
         atfreq = 902.4
@@ -233,14 +259,25 @@ class XBeeDevice:
                 self.log.warn("At command failed: {}".format(pkt))
                                                             
             if pkt['command'] == b'SL':
-                self.address = (0xffffffff00000000 & self.address) | (struct.unpack('>L', pkt['parameter'])[0]) 
+                if 'parameter' in pkt:
+                    self.address = (0xffffffff00000000 & self.address) | (struct.unpack('>L', pkt['parameter'])[0]) 
             elif pkt['command'] == b'SH':
-                self.address = (0x00000000ffffffff & self.address) | (struct.unpack('>L', pkt['parameter'])[0] << 32)
+                if 'parameter' in pkt:
+                    self.address = (0x00000000ffffffff & self.address) | (struct.unpack('>L', pkt['parameter'])[0] << 32)
+            elif pkt['command'] == b'MY':
+                if 'parameter' in pkt:
+                    self.address = struct.unpack (">H", pkt['parameter'])[0]
             elif pkt['command'] == b'DB':
                 self.log.info("RSSI -{}dBm".format(pkt['parameter'][0] ))
                 
                 self.rssi_history.pop()
                 self.rssi_history.append(-pkt['parameter'][0])
+            elif pkt['command'] == b'NP':
+                self.log.info("NP Resp: {}".format(pkt))
+                if 'parameter' in pkt:
+                    self.mtu = pkt['parameter'][0]
+                else:
+                    self.mtu = 100 #series 1 doesn't support NP, and is always 100
             elif pkt['command'] == b'FN':
                 self.log.info("Neighbor info: {}".format(pkt['rf_data'].decode('utf-8')))
             elif pkt['command'] == b'ND':
@@ -262,10 +299,19 @@ class XBeeDevice:
         if pkt['id'] == 'rx':
             # poll rssi
             self.send_cmd("at", command=b'DB')
-                        
+
+
+            srcaddr = None   
+            if self._addrlen == 2:
+                srcaddr = struct.unpack(">H", pkt['source_addr'])[0]
+            elif self._addrlen == 8:
+                srcaddr = struct.unpack(">Q", pkt['source_addr'])[0]
+            else: 
+                raise Exception("Unsupported address length")
+            
             self._rxcallback(self, 
-                             struct.unpack(">Q", pkt['source_addr'])[0], 
-                             pkt['rf_data'])                
+                             srcaddr, 
+                             pkt['rf_data'])
 
         
     def close(self):
