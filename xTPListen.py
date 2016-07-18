@@ -20,8 +20,6 @@ from xTP import xTP
 #from xb900hp import XBee900HP
 from xb900hp import XBee900HP as XBee
 
-from scipy.stats.mstats_basic import threshold
-
 logfile = os.path.splitext(sys.argv[0])[0] + ".log"
 
 logging.basicConfig(level=logging.INFO,
