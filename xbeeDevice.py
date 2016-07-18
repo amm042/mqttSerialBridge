@@ -27,9 +27,11 @@ class XBeeDevice:
         self._next_frame_id = 1    
         self._max_packets = 3
         self._timeout = datetime.timedelta(seconds=5)        
+        self._lastrssi = datetime.datetime.now()
 
         self.address = 0     
-        self.mtu = None   
+
+        self.mtu = 100 #series 1 doesn't support NP, and is always 100
         self.on_energy = None        
         
         try:
@@ -79,7 +81,7 @@ class XBeeDevice:
             self.send_cmd("at", command=b'SL')
             self.send_cmd("at", command=b'SH')
         
-        self.send_cmd("at", command=b'NP')
+        #self.send_cmd("at", command=b'NP')
         self.flush()
         
     def flush(self):
@@ -135,9 +137,13 @@ class XBeeDevice:
         'format and send a data packet, default to broadcast'
                 
         if self._addrlen == 2:
-            return self.send_cmd(cmd=atcmd, dest_addr=struct.pack(">H", dest), data=data, **kwargs)
+            return self.send_cmd(cmd=atcmd, 
+                                 dest_addr=struct.pack(">H", dest), 
+                                 data=data, **kwargs)
         elif self._addrlen == 8:
-            return self.send_cmd(cmd=atcmd, dest_addr=struct.pack(">Q", dest), data=data, **kwargs)
+            return self.send_cmd(cmd=atcmd, 
+                                 dest_addr=struct.pack(">Q", dest), 
+                                 data=data, **kwargs)
         else: 
             raise Exception("Unsupported address length")
                
@@ -149,9 +155,13 @@ class XBeeDevice:
                 raise TimeoutError("Tx overrun -- are packets going out?")            
             time.sleep(0.05) 
         
-        self._idle.clear()           
         e = threading.Event()
-        fid = struct.pack("B", self._next_frame_id)
+        if 'ack' not in kwargs or kwargs['ack'] == True: 
+            self._idle.clear()                                   
+            fid = struct.pack("B", self._next_frame_id)
+        else:
+            # frame id 0 is non acked
+            fid = b'\x00'
         
         try:
             self._lock.acquire()
@@ -169,10 +179,13 @@ class XBeeDevice:
         
         self._xbee.send(cmd, frame_id = fid, **kwargs)        
         
-        self._next_frame_id += 1
-        if self._next_frame_id > 0xff:
-            self._next_frame_id = 1
-        
+        if 'ack' not in kwargs or kwargs['ack'] == True: 
+            self._next_frame_id += 1
+            if self._next_frame_id > 0xff:
+                self._next_frame_id = 1
+        else:
+            e.set()
+            
         return e
         
     def _on_error(self, error):
@@ -276,8 +289,7 @@ class XBeeDevice:
                 self.log.info("NP Resp: {}".format(pkt))
                 if 'parameter' in pkt:
                     self.mtu = pkt['parameter'][0]
-                else:
-                    self.mtu = 100 #series 1 doesn't support NP, and is always 100
+                
             elif pkt['command'] == b'FN':
                 self.log.info("Neighbor info: {}".format(pkt['rf_data'].decode('utf-8')))
             elif pkt['command'] == b'ND':
@@ -297,8 +309,12 @@ class XBeeDevice:
             else:
                 self.log.warn("Unsupported command response: {}:{}".format(pkt['command'], pkt))
         if pkt['id'] == 'rx':
-            # poll rssi
-            self.send_cmd("at", command=b'DB')
+            
+            
+            if datetime.datetime.now() - self._lastrssi > datetime.timedelta(seconds=5):
+                # poll rssi
+                self.send_cmd("at", command=b'DB')
+                self._lastrssi = datetime.datetime.now()
 
 
             srcaddr = None   

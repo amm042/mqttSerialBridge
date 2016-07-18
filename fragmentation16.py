@@ -15,6 +15,14 @@ import struct
 MAGIC = 0x17
 class CrcError(Exception): pass
 
+class Fragment():
+    def __init__(self, frag_num, total_frags, crc, data):
+        self.num = frag_num
+        self.total = total_frags
+        self.crc = crc
+        self.data = data
+
+
 def encode(frag_num, total_frags, crc, frag):        
     h = struct.pack(">BHHL", MAGIC, total_frags, frag_num, crc )
     #print(h, frag)        
@@ -24,7 +32,7 @@ def decode(frag):
     m, tf, cf, crc = struct.unpack(">BHHL", frag[0:9])
     #print(m, tf, cf, crc)
     return m, tf, cf, crc, frag[9:]
-def make_frags(data, threshold=121):
+def make_frags(data, threshold=121, encode = True):
     '''given some data (binary string) add the fragmentation header and 
         fragment if necessary. Adds 6 bytes of overhead, so threshold of 
         121 will generate a max packet length of 127 bytes.
@@ -43,7 +51,11 @@ def make_frags(data, threshold=121):
     while at<len(data):
         frag_data = data[at:at+threshold] 
         at += len(frag_data)
-        yield encode(frag_num, total_frags, crc, frag_data)
+        if encode:
+            yield encode(frag_num, total_frags, crc, frag_data)
+        else:
+            yield Fragment(frag_num, total_frags+1, crc, frag_data)
+            
         frag_num += 1
         
 frag_buf = {} 

@@ -9,13 +9,17 @@ import hexdump
 import time
 import datetime
 import threading
+from bitarray import bitarray
+import struct
+
+from xTP import xTP
 from xbee.ieee import XBee
 #from xb900hp import XBee900HP
 from scipy.stats.mstats_basic import threshold
 
 logfile = os.path.splitext(sys.argv[0])[0] + ".log"
 
-logging.basicConfig(level=logging.DEBUG,
+logging.basicConfig(level=logging.INFO,
                     handlers=(logging.StreamHandler(sys.stdout),
                               logging.handlers.RotatingFileHandler(logfile,
                                                                     maxBytes = 256*1024,
@@ -24,18 +28,33 @@ logging.basicConfig(level=logging.DEBUG,
       
 class NoRemoteException(Exception):pass
 class XTPClient():
-    def rx(self, xbeedev, srcaddr, fragdata):
+    def rx(self, xbeedev, srcaddr, data):
         self.last_activity = datetime.datetime.now()        
-        data = frag.receive_frag(fragdata)
-        
-        if data == b'HELLO':
-            self.remote = srcaddr
-            self.have_remote.set()        
-        elif data != None:
-            logging.info("RX [{:x}<-{:x}]: {} -- {}".format(self.xbee.address,
+        logging.debug("RX [{:x}<-{:x}]: {} -- {}".format(self.xbee.address,
                                                             srcaddr,
                                                      data, 
                                                      hexdump.dump(data)))
+        
+        if data[0:1] == xTP.HELLO:
+            self.remote = srcaddr
+            self.have_remote.set()    
+        elif data[0:1] == xTP.SEND32_BEGIN:
+            self.begin_transfer.set()
+        elif data[0:1] == xTP.SEND32_ACKS:
+            l = struct.unpack(">L", data[1:5])[0]
+            self.acks = bitarray()            
+            self.acks.setall(0)
+            self.acks.frombytes(data[5:])
+            # mark extra bits as received so all() works
+            for z in range(l, len(self.acks)):
+                self.acks[z] = True
+            logging.debug("mask is [{}]: {}".format( l, self.acks ))
+            
+            self.have_acks.set()
+        else:
+            logging.warn("RX -- unknown message format ({:x})".format(data[0]))        
+        
+            
     def __init__(self, portstr):
         self.xbee = XBeeDevice(portstr, self.rx, XBee)        
         #self.xbee.send_cmd("at", command=b'MY', parameter=b'\x16\x16')
@@ -45,12 +64,17 @@ class XTPClient():
                 
         self.remote = None
         self.have_remote = threading.Event()
+        self.begin_transfer = threading.Event()
+        self.have_acks = threading.Event()
+        self.retries = 15
         
         # testing
         #self.remote = 0x1616
         #self.have_remote.set()
         
-        #self.xbee.send_cmd("at", command=b'MM', parameter=b'\x02')
+        # mode 1 = 802.15.4 NO ACKs
+        self.xbee.send_cmd("at", command=b'MM', parameter=b'\x01')
+              
         #self.xbee.send_cmd("at", command=b'CH')
         #self.xbee.send_cmd("at", command=b'ID')
         
@@ -59,25 +83,98 @@ class XTPClient():
         
         self.remote_timeout = datetime.timedelta(seconds=30)
 
-    def send(self, data, dest=0xffff):
+    def send(self, data, remote_filename, filesize, offset = 0, dest=0xffff):
         "send with fragmentation, returns true on success"
         
+        start = datetime.datetime.now()
         self.last_activity = datetime.datetime.now()
-        parts = []
-        for f in frag.make_frags(data, threshold=self.xbee.mtu>>1):
-            e = self.xbee.send(data=f, dest=dest)
+                
+        # mtu seems imprecise. (does not include headers)        
+        frags = list(frag.make_frags(data, threshold=self.xbee.mtu - 8, encode = False))
+        
+        self.begin_transfer.clear()
+        self.have_acks.clear()
+        ok_begin = False                
+        for i in range(self.retries):            
+            msg = xTP.SEND32_REQ + struct.pack(">LLLL", 
+                              offset, filesize, frags[0].total, frags[0].crc) + \
+                              remote_filename.encode("utf-8")
             
-            logging.info("TX [{:x}->{:x}][{}]: {}".format(self.xbee.address,
-                                      dest,
-                                      e.fid, hexdump.dump(f)))
-            parts.append(e)
-            if e.wait(self.xbee._timeout.total_seconds()):
-                logging.info("TX [{}] complete: {}".format(e.fid, e.pkt))
+            logging.debug("TX SEND32_REQ {}/{} [{:x}->{:x}]: {}".format(i, self.retries,
+                                    self.xbee.address,
+                                    dest,
+                                    hexdump.dump(msg)))
+                        
+            try:
+                self.xbee.sendwait(data=msg, dest=dest)
+            except TimeoutError:
+                continue                                
+            
+            if (self.begin_transfer.wait(self.xbee._timeout.total_seconds())):
+                logging.info("Begin transfer at {} of {} for file {}.".format(offset, filesize, remote_filename))
+                ok_begin = True                
+                break
             else:
-                logging.info("TX [{}] timeout".format(e.fid))
+                logging.info("Failed to begin transfer.")
+                return False
+                                                    
+        if ok_begin == False:
+            return False
+        
+        #initial set of acks
+        self.acks = bitarray(len(frags))
+        self.acks.setall(0)
+        for j in range(self.retries):   
+            txcnt = 0                   
+            for i,f in enumerate(frags):
+                if self.acks[i] == False:
+                    txcnt += 1 
+                    d = xTP.SEND32_DATA + struct.pack(">L", i) + f.data
+                    e = self.xbee.send(data=d,
+                                       dest=dest)
+                    
+                    logging.debug("TX SEND32_DATA {}/{} [{:x}->{:x}][{}]: {}".format(i, len(frags),
+                                            self.xbee.address,
+                                            dest,
+                                            e.fid, hexdump.dump(d)))
+            if txcnt == 0:
+                logging.warn("TX complete due to no packets to send")
+                return True # must have worked.
+            
+            # block until all packets go out...
+            self.xbee.flush()
+            
+            got_acks = False
+            for k in range(self.retries):
+                msg = xTP.SEND32_GETACKS                                  
+                self.have_acks.clear()
+                
+                logging.debug("TX SEND32_GETACKS {}/{} [{:x}->{:x}][{}]: {}".format(k, self.retries,
+                                        self.xbee.address,
+                                        dest,
+                                        e.fid, hexdump.dump(msg)))
+                            
+                try:
+                    self.xbee.sendwait(data=msg, dest=dest)
+                except TimeoutError:
+                    continue                    
+                
+                if self.have_acks.wait(self.xbee._timeout.total_seconds()):
+                    logging.debug("Got acks. [all=={}]".format(self.acks.all()))
+                    got_acks = True
+                    tm = datetime.datetime.now() - start
+                    if self.acks.all():
+                        logging.info("Finish transfer at {} of {} for file {} in {} = {:.2f} kbps.".format(
+                                offset, filesize, remote_filename, tm, (8*len(data)/1024) / tm.total_seconds() ))
+                        return True
+                    break
+                
+            if got_acks == False:
+                loggin.warn("Failed because remote didn't send acks.")
                 return False
             
-        return True
+        
+        return False
                          
         #for part in parts:
         #    if part.wait(self.xbee._timeout.total_seconds()):
@@ -87,12 +184,33 @@ class XTPClient():
 
     def send_file(self, filename):
         if os.path.exists(filename):
+            logging.info("Waiting for remote side.")
             if not self.have_remote.wait(self.remote_timeout.total_seconds()):
                 raise NoRemoteException("No remote server detected.")
+            
+            
+            pos = 0
             with open(filename, 'rb') as f:
-                data = f.read()
-            self.send(data=data, dest=self.remote)
-            #self.send(data=data, dest=0xffff)
+                
+                while pos == 0 or len(data) > 0:
+                    data = f.read(6*1024)
+                    
+                    if len(data) > 0:
+                        success = False
+                        for i in range(5):                           
+                            if (self.send(data=data, 
+                                  remote_filename=filename,                                  
+                                  offset = pos,
+                                  filesize= os.path.getsize(filename), 
+                                  dest=self.remote)):
+                                pos += len(data)
+                                success = True
+                                break
+                            logging.warn("Retry chunk.")
+                        if success == False:
+                            return False
+            
+            return success
         
 if __name__ == "__main__":
     # run the Server
@@ -102,7 +220,16 @@ if __name__ == "__main__":
         xtp = XTPClient(sys.argv[1])
         time.sleep(0.5)
         for filename in sys.argv[2:]:
-            xtp.send_file(filename)
+            logging.info("Sending {}".format(filename))
+            
+            start = datetime.datetime.now()
+            if xtp.send_file(filename):
+                t = (datetime.datetime.now() - start).total_seconds()
+                sz = os.path.getsize(filename)
+                logging.info("Sent {} success {:.2f} kbps.".format(filename,
+                                                              (8*sz/1024)/t))
+            else:
+                logging.info("Sent {} failed.".format(filename))
     finally:
         if xtp != None:
             xtp.xbee.close()
