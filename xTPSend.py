@@ -13,8 +13,9 @@ from bitarray import bitarray
 import struct
 
 from xTP import xTP
-from xbee.ieee import XBee
-#from xb900hp import XBee900HP
+#from xbee.ieee import XBee
+from xb900hp import XBee900HP as XBee
+
 from scipy.stats.mstats_basic import threshold
 
 logfile = os.path.splitext(sys.argv[0])[0] + ".log"
