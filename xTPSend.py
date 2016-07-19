@@ -173,12 +173,16 @@ class XTPClient():
         
         return False                         
 
-    def send_file(self, filename):
+    def send_file(self, filename, remote_filename = None):
+        if remote_filename == None:
+            remote_filename = filename
+        
         if os.path.exists(filename):
-            logging.info("Waiting for remote side.")
-            if not self.have_remote.wait(self.remote_timeout.total_seconds()):
-                raise NoRemoteException("No remote server detected.")
-                        
+            if not self.have_remote.wait(timeout=0):
+                logging.info("Waiting for remote side.")
+                if not self.have_remote.wait(self.remote_timeout.total_seconds()):
+                    raise NoRemoteException("No remote server detected.")
+            
             pos = 0
             with open(filename, 'rb') as f:
                 
@@ -189,7 +193,7 @@ class XTPClient():
                         success = False
                         for i in range(5):                           
                             if (self.send(data=data, 
-                                  remote_filename=filename,                                  
+                                  remote_filename=remote_filename,                                  
                                   offset = pos,
                                   filesize= os.path.getsize(filename), 
                                   dest=self.remote)):
@@ -219,17 +223,20 @@ class XTPClient():
         
         return None, None
             
-    def verify(self, filename):
+    def verify(self, filename,  remote_filename = None):
+        if remote_filename == None:
+            remote_filename = filename        
         if os.path.exists(filename):
-            logging.info("Waiting for remote side.")
-            if not self.have_remote.wait(self.remote_timeout.total_seconds()):
-                raise NoRemoteException("No remote server detected.")
+            if not self.have_remote.wait(timeout=0):
+                logging.info("Waiting for remote side.")
+                if not self.have_remote.wait(self.remote_timeout.total_seconds()):
+                    raise NoRemoteException("No remote server detected.")
             
             d = md5file(filename)
             
             logging.debug("digest of {} is: [{}]: {}".format(filename, len(d),d))
             
-            msg = xTP.MD5_CHECK + d + 16*b'\x00' + filename.encode("utf-8")
+            msg = xTP.MD5_CHECK + d + 16*b'\x00' + remote_filename.encode("utf-8")
             addr, rsp = self.send_pkt_retry(msg, xTP.MD5_CHECK)
             
             if rsp == None:

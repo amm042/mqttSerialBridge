@@ -13,8 +13,10 @@ import struct
 import queue
 import zlib
 import io
+import shutil
 from bitarray import bitarray
 import argparse
+import tempfile
 
 from xTP import xTP, md5file
 from xbee.ieee import XBee as XBeeS1
@@ -31,28 +33,43 @@ class XTPServer():
     
         if fragdata[0:1] == xTP.SEND32_REQ:
             offset, total_size, tot, crc = struct.unpack(">LLLL", fragdata[1:17])
-            fname = fragdata[17:].decode('utf-8')
+            fname = fragdata[17:].decode('utf-8') + '.part'
             self.transfers[srcaddr] = {'filename': fname,
                                        'crc': crc,
                                        'offset': offset,
                                        'total_frags': tot,
                                        'total_size': total_size,
-                                       'frag_mask': bitarray(tot),
+                                       'frag_mask': bitarray(tot),                                       
                                        'frags': {},
                                        'status': fragdata[0]}
             t = self.transfers[srcaddr]
-            t['frag_mask'].setall(0)            
+            t['frag_mask'].setall(0)
+            
+            outpath = os.path.abspath(os.path.join(self.path, 
+                                                   os.path.dirname(fname)))
+            os.makedirs(outpath, exist_ok=True)
+            
             logging.info("Begin transfer {} of {}: {}".format(t['offset'], t['total_size'],
                                                               t['filename']))
             self.txq.put((srcaddr, xTP.SEND32_BEGIN))
-        elif fragdata[0:1] == xTP.MD5_CHECK:
+        elif fragdata[0:1] == xTP.MD5_CHECK and srcaddr in self.transfers:
             remotehash = fragdata[1:17]
             localhash = fragdata[17:33]
-            filename = fragdata[33:].decode('utf-8')
+            true_filename = fragdata[33:].decode('utf-8')
+            true_filename = os.path.abspath(os.path.join(self.path, true_filename))
+            filename = fragdata[33:].decode('utf-8') + '.part'
             filename = os.path.abspath(os.path.join(self.path, filename))
-            if os.path.exists(filename):
+            
+            if os.path.exists(filename):                
                 d = md5file(filename)
+                if d == remotehash:
+                    logging.info("MD5 check requested on: {} -- hash check is good".format(filename))
+                    shutil.move(filename, true_filename)
+                else:
+                    logging.warn("MD5 check requested on: {} -- hash ERROR -- removing file".format(filename))
+                    os.remove(filename)
             else:
+                loggin.warn("MD5 check requested on: {} -- file does not exist!".format(filename))
                 d = 16 * b'\x00'                
             self.txq.put( (srcaddr, xTP.MD5_CHECK + remotehash + d + fragdata[33:]))            
         elif fragdata[0:1] == xTP.SEND32_GETACKS and srcaddr in self.transfers:
@@ -80,7 +97,10 @@ class XTPServer():
                 if mycrc == self.transfers[srcaddr]['crc']:
                     
                     outfile = os.path.abspath(os.path.join(self.path, self.transfers[srcaddr]['filename']))
+                    
                     logging.info("File transfer complete, SUCCESS, write to {}".format(outfile))
+                    
+                    #outfile.seek(self.transfers[srcaddr]['offset'], io.SEEK_SET)
                     
                     if os.path.exists(outfile):                        
                         with open (outfile, 'r+b') as f:
@@ -92,6 +112,7 @@ class XTPServer():
                             f.seek(self.transfers[srcaddr]['offset'], io.SEEK_SET)                            
                             f.write(r)
                             f.close()   
+                    
                 else:
                     logging.warn("File transfer complete, CRC failure local={:x} remote={:x}".format(
                         mycrc,
