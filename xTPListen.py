@@ -14,21 +14,11 @@ import queue
 import zlib
 import io
 from bitarray import bitarray
-from xTP import xTP
+import argparse
 
-#from xbee.ieee import XBee
-#from xb900hp import XBee900HP
-from xb900hp import XBee900HP as XBee
-
-logfile = os.path.splitext(sys.argv[0])[0] + ".log"
-
-logging.basicConfig(level=logging.INFO,
-                    handlers=(logging.StreamHandler(sys.stdout),
-                              logging.handlers.RotatingFileHandler(logfile,
-                                                                    maxBytes = 256*1024,
-                                                                    backupCount = 0), ),
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-      
+from xTP import xTP, md5file
+from xbee.ieee import XBee as XBeeS1
+from xb900hp import XBee900HP
 
 class XTPServer():
     def rx(self, xbeedev, srcaddr, fragdata):
@@ -51,11 +41,20 @@ class XTPServer():
                                        'frags': {},
                                        'status': fragdata[0]}
             t = self.transfers[srcaddr]
-            t['frag_mask'].setall(0)
-            
+            t['frag_mask'].setall(0)            
             logging.info("Begin transfer {} of {}: {}".format(t['offset'], t['total_size'],
                                                               t['filename']))
             self.txq.put((srcaddr, xTP.SEND32_BEGIN))
+        elif fragdata[0:1] == xTP.MD5_CHECK:
+            remotehash = fragdata[1:17]
+            localhash = fragdata[17:33]
+            filename = fragdata[33:].decode('utf-8')
+            filename = os.path.abspath(os.path.join(self.path, filename))
+            if os.path.exists(filename):
+                d = md5file(filename)
+            else:
+                d = 16 * b'\x00'                
+            self.txq.put( (srcaddr, xTP.MD5_CHECK + remotehash + d + fragdata[33:]))            
         elif fragdata[0:1] == xTP.SEND32_GETACKS and srcaddr in self.transfers:
             logging.debug("Sending ack data. [{}]: {}".format(
                             self.transfers[srcaddr]['total_frags'],
@@ -103,8 +102,8 @@ class XTPServer():
             logging.warn("RX -- unknown message format") 
 
     
-    def __init__(self, portstr, filepath):
-        self.xbee = XBeeDevice(portstr, self.rx, XBee)
+    def __init__(self, portstr, filepath, xbeeclass):
+        self.xbee = XBeeDevice(portstr, self.rx, xbeeclass)
         #self.xbee.send_cmd("at", command=b'MY', parameter=b'\x15\x15')
                 
         # mode 1 = 802.15.4 NO ACKs
@@ -153,10 +152,28 @@ class XTPServer():
                     
 if __name__ == "__main__":
     # run the Server
+    p = argparse.ArgumentParser()
     
+    p.add_argument("portstr", help="pylink style port string eg: /dev/ttyUSB0:38400:8N1")
+    p.add_argument("store", help="path to storage root eg: ./store")
+    p.add_argument("-d", "--debug", help="logging debug level",
+                    choices=['DEBUG', 'INFO', 'WARN', 'ERROR', 'CRITICAL'], default = 'INFO')
+    p.add_argument("-x", "--xbee", help="XBee variant", 
+                    choices=['S1', '900HP'], default='S1')
+    xcls = {'S1': XBeeS1, '900HP': XBee900HP}
+    
+    args = p.parse_args()    
+    logfile = os.path.splitext(os.path.basename(sys.argv[0]))[0] + ".log"    
+    logging.basicConfig(level=logging.getLevelName(args.debug),
+                        handlers=(logging.StreamHandler(sys.stdout),
+                                  logging.handlers.RotatingFileHandler(logfile,
+                                                                        maxBytes = 256*1024,
+                                                                        backupCount = 0), ),
+                        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+              
     xtpsvr = None
     try:
-        xtpsvr = XTPServer(sys.argv[1], sys.argv[2])
+        xtpsvr = XTPServer(args.portstr, args.store, xcls[args.xbee])
         xtpsvr.run_forever()
     finally:
         if xtpsvr != None:

@@ -11,23 +11,15 @@ import datetime
 import threading
 from bitarray import bitarray
 import struct
+import argparse
 
-from xTP import xTP
-#from xbee.ieee import XBee
-from xb900hp import XBee900HP as XBee
 
-from scipy.stats.mstats_basic import threshold
-
-logfile = os.path.splitext(sys.argv[0])[0] + ".log"
-
-logging.basicConfig(level=logging.INFO,
-                    handlers=(logging.StreamHandler(sys.stdout),
-                              logging.handlers.RotatingFileHandler(logfile,
-                                                                    maxBytes = 256*1024,
-                                                                    backupCount = 0), ),
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-      
+from xTP import xTP, md5file
+from xbee.ieee import XBee as XBeeS1
+from xb900hp import XBee900HP
+     
 class NoRemoteException(Exception):pass
+
 class XTPClient():
     def rx(self, xbeedev, srcaddr, data):
         self.last_activity = datetime.datetime.now()        
@@ -36,7 +28,10 @@ class XTPClient():
                                                      data, 
                                                      hexdump.dump(data)))
         
-        if data[0:1] == xTP.HELLO:
+        if data[0:1] in self.have_response:
+            self.have_response[data[0:1]]['rsp'] = (srcaddr, data)
+            self.have_response[data[0:1]]['e'].set()                   
+        elif data[0:1] == xTP.HELLO:
             self.remote = srcaddr
             self.have_remote.set()    
         elif data[0:1] == xTP.SEND32_BEGIN:
@@ -56,8 +51,8 @@ class XTPClient():
             logging.warn("RX -- unknown message format ({:x})".format(data[0]))        
         
             
-    def __init__(self, portstr):
-        self.xbee = XBeeDevice(portstr, self.rx, XBee)        
+    def __init__(self, portstr, xbeeclass):
+        self.xbee = XBeeDevice(portstr, self.rx, xbeeclass)        
         #self.xbee.send_cmd("at", command=b'MY', parameter=b'\x16\x16')
         
         logging.info("my address: {:x}".format(self.xbee.address))
@@ -67,6 +62,7 @@ class XTPClient():
         self.have_remote = threading.Event()
         self.begin_transfer = threading.Event()
         self.have_acks = threading.Event()
+        self.have_response = {}
         self.retries = 15
         
         # testing
@@ -175,21 +171,14 @@ class XTPClient():
                 return False
             
         
-        return False
-                         
-        #for part in parts:
-        #    if part.wait(self.xbee._timeout.total_seconds()):
-        #        logging.info("TX [{}] complete: {}".format(part.fid, part.pkt))
-        #    else:
-        #        logging.info("TX [{}] timeout".format(part.fid))
+        return False                         
 
     def send_file(self, filename):
         if os.path.exists(filename):
             logging.info("Waiting for remote side.")
             if not self.have_remote.wait(self.remote_timeout.total_seconds()):
                 raise NoRemoteException("No remote server detected.")
-            
-            
+                        
             pos = 0
             with open(filename, 'rb') as f:
                 
@@ -212,22 +201,83 @@ class XTPClient():
                             return False
             
             return success
+    def send_pkt_retry(self, msg, waitfor_msg):                
+        self.have_response[waitfor_msg] = {'e': threading.Event(), 'rsp': None}
+        for i in range(self.retries):            
+     
+            logging.debug("TX -{:02x}- {}/{} [{:x}->{:x}]: {}".format(msg[0], i, self.retries,
+                                    self.xbee.address,
+                                    self.remote,
+                                    hexdump.dump(msg)))
+            
+            try:
+                self.xbee.sendwait(data=msg, dest=self.remote)        
+            except TimeoutError:
+                continue
+            if self.have_response[waitfor_msg]['e'].wait(self.xbee._timeout.total_seconds()):
+                return self.have_response[waitfor_msg]['rsp']
         
+        return None, None
+            
+    def verify(self, filename):
+        if os.path.exists(filename):
+            logging.info("Waiting for remote side.")
+            if not self.have_remote.wait(self.remote_timeout.total_seconds()):
+                raise NoRemoteException("No remote server detected.")
+            
+            d = md5file(filename)
+            
+            logging.debug("digest of {} is: [{}]: {}".format(filename, len(d),d))
+            
+            msg = xTP.MD5_CHECK + d + 16*b'\x00' + filename.encode("utf-8")
+            addr, rsp = self.send_pkt_retry(msg, xTP.MD5_CHECK)
+            
+            if rsp == None:
+                return None
+            
+            lhash = rsp[1:17]
+            rhash = rsp[17:33]
+            logging.debug("response local: {} remote: {}".format(lhash, rhash))
+            return lhash == rhash
+            
+                
 if __name__ == "__main__":
-    # run the Server
+    # run the Client
     
+    p = argparse.ArgumentParser()
+    
+    p.add_argument("portstr", help="pylink style port string eg: /dev/ttyUSB0:38400:8N1")
+    p.add_argument("file", help="file(s) to send", nargs='+')
+    p.add_argument("-d", "--debug", help="logging debug level",
+                    choices=['DEBUG', 'INFO', 'WARN', 'ERROR', 'CRITICAL'], default = 'INFO')
+    p.add_argument("-x", "--xbee", help="XBee variant", 
+                    choices=['S1', '900HP'], default='S1')
+    xcls = {'S1': XBeeS1, '900HP': XBee900HP}    
+    
+    args = p.parse_args()
+    logfile = os.path.splitext(os.path.basename(sys.argv[0]))[0] + ".log"
+    logging.basicConfig(level=logging.getLevelName(args.debug),
+                    handlers=(logging.StreamHandler(sys.stdout),
+                              logging.handlers.RotatingFileHandler(logfile,
+                                                                    maxBytes = 256*1024,
+                                                                    backupCount = 0), ),
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        
     xtp = None
-    try:
-        xtp = XTPClient(sys.argv[1])
+    try:        
+        xtp = XTPClient(args.portstr, xcls[args.xbee])
+        
         time.sleep(0.5)
-        for filename in sys.argv[2:]:
+        for filename in args.file:
             logging.info("Sending {}".format(filename))
             
             start = datetime.datetime.now()
+            
             if xtp.send_file(filename):
+                result = xtp.verify(filename)
                 t = (datetime.datetime.now() - start).total_seconds()
                 sz = os.path.getsize(filename)
-                logging.info("Sent {} success {:.2f} kbps.".format(filename,
+                logging.info("Sent {} verified={}, {:.2f} kbps.".format(filename, result,
                                                               (8*sz/1024)/t))
             else:
                 logging.info("Sent {} failed.".format(filename))
