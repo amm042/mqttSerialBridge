@@ -69,7 +69,7 @@ class XTPServer():
                     logging.warn("MD5 check requested on: {} -- hash ERROR -- removing file".format(filename))
                     os.remove(filename)
             else:
-                loggin.warn("MD5 check requested on: {} -- file does not exist!".format(filename))
+                logging.warn("MD5 check requested on: {} -- file does not exist!".format(filename))
                 d = 16 * b'\x00'                
             self.txq.put( (srcaddr, xTP.MD5_CHECK + remotehash + d + fragdata[33:]))            
         elif fragdata[0:1] == xTP.SEND32_GETACKS and srcaddr in self.transfers:
@@ -123,8 +123,8 @@ class XTPServer():
             logging.warn("RX -- unknown message format") 
 
     
-    def __init__(self, portstr, filepath, xbeeclass):
-        self.xbee = XBeeDevice(portstr, self.rx, xbeeclass)
+    def __init__(self, portstr, filepath, xbeeclass, **kwargs):
+        self.xbee = XBeeDevice(portstr, self.rx, xbeeclass, **kwargs)
         #self.xbee.send_cmd("at", command=b'MY', parameter=b'\x15\x15')
                 
         # mode 1 = 802.15.4 NO ACKs
@@ -181,6 +181,7 @@ if __name__ == "__main__":
                     choices=['DEBUG', 'INFO', 'WARN', 'ERROR', 'CRITICAL'], default = 'INFO')
     p.add_argument("-x", "--xbee", help="XBee variant", 
                     choices=['S1', '900HP'], default='S1')
+    p.add_argument("-m", "--cm", help="XBee Channel Mask [Hex] (900hp)", default =None)
     xcls = {'S1': XBeeS1, '900HP': XBee900HP}
     
     args = p.parse_args()    
@@ -189,12 +190,15 @@ if __name__ == "__main__":
                         handlers=(logging.StreamHandler(sys.stdout),
                                   logging.handlers.RotatingFileHandler(logfile,
                                                                         maxBytes = 256*1024,
-                                                                        backupCount = 0), ),
+                                                                        backupCount = 2), ),
                         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
               
     xtpsvr = None
     try:
-        xtpsvr = XTPServer(args.portstr, args.store, xcls[args.xbee])
+        xtpsvr = XTPServer(args.portstr, args.store, xcls[args.xbee], xbeeCM= int(args.cm,16))
+        
+        xtpsvr.xbee.send_cmd("at", command=b'HP', parameter=b'\x03')
+        xtpsvr.xbee.send_cmd("at", command=b'PL', parameter=b'\x04')
         xtpsvr.run_forever()
     finally:
         if xtpsvr != None:

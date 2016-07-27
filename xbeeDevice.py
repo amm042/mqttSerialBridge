@@ -14,7 +14,7 @@ class XBeeDied(Exception): pass
 class XBeeDevice:
     MAX_TIMEOUTS = 6
     
-    def __init__(self, portstr, rxcallback, xbeeclass):
+    def __init__(self, portstr, rxcallback, xbeeclass, **kwargs):
         
         self._in_init = True
         self._portstr = portstr
@@ -40,6 +40,10 @@ class XBeeDevice:
             self.close()
             raise x
         
+        if 'xbeeCM' in kwargs:
+            self.send_cmd("at", command=b'CM', parameter= struct.pack(">Q", kwargs['xbeeCM']))
+            self.send_cmd("at", command=b'CM')
+
         self._in_init = False
         
         

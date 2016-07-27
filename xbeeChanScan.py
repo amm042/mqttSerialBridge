@@ -3,6 +3,8 @@ import time
 import logging
 import struct
 import numpy
+from xb900hp import XBee900HP
+
 logging.basicConfig(level=logging.INFO)
 
 def rx(dev, src, data):
@@ -21,11 +23,13 @@ def print_info():
     
     
     print(80*"-")
-    cm = sorted(dat.items(), key=lambda x: numpy.mean(x[1]), reverse = True)
+    cm = sorted(dat.items(), key=lambda x: numpy.mean(x[0]), reverse = True)
     
     for freq, dbms in cm:         
         print ("{:03.2f} MHz = -{:3.2f} +- {:3.2f} dBm".format(freq, numpy.mean(dbms), numpy.std(dbms)))
-        
+    cm = sorted(dat.items(), key=lambda x: numpy.mean(x[1]), reverse = True)
+    
+   
     mask = 0
     f = []
     for freq, dbms in cm[:26]:
@@ -50,12 +54,13 @@ def energy(dev, info):
         #print ("{:03.2f} = {} dBm".format(freq, dbm))
         if freq in dat:
             dat[freq].append(dbm)
+#            dat[freq] = [dbm]
         else:
             dat[freq] = [dbm]
     
     print_info()
     
-xb = xbeeDevice.XBeeDevice('/dev/ttyUSB0:38400:8N1', rx)
+xb = xbeeDevice.XBeeDevice('/dev/ttyUSB0:38400:8N1', rx, XBee900HP)
 xb.on_energy = energy
 #xbee uses the first MF chnanels from the CM mask. [MFdefault is 25]
 

@@ -7,6 +7,7 @@ import logging.handlers
 import random
 import os
 import sys
+from xb900hp import XBee900HP
 #logging.basicConfig(level=logging.INFO)
 
 logfile =  os.path.splitext(sys.argv[0])[0] + ".log"
@@ -21,10 +22,11 @@ logging.basicConfig(level=logging.INFO,
 def rx(dev, src, data):
     
     logging.info("RX [{:x}, {}dBm]: {}".format(src, dev.rssi_history[-1], data))
-    
-    xb.send(b'PONG', dest = src)
-    logging.info("TX [{:x}]: PONG ".format(src))
-xb = xbeeDevice.XBeeDevice('/dev/ttyUSB0:38400:8N1', rx)
+    if data == b'PING':    
+        xb.send(b'PONG', dest = src)
+        logging.info("TX [{:x}]: PONG ".format(src))
+
+xb = xbeeDevice.XBeeDevice('/dev/ttyUSB0:38400:8N1', rx, XBee900HP)
 
 try:
     xb.send_cmd("at", command=b'PL', parameter = b'\x04')
@@ -32,17 +34,18 @@ try:
     xb.send_cmd("at", command=b'ID', parameter = b'\x33\x33')
     
     # channel mask for dana roof from scanning
-    xb.send_cmd("at", command=b'CM', parameter=struct.pack(">Q", 0xfceb29f032404210))
+#    xb.send_cmd("at", command=b'CM', parameter=struct.pack(">Q", 0xfceb29f032404210))
+    xb.send_cmd("at", command=b'CM', parameter= struct.pack(">Q", 0xffe7f4f430000000))
     xb.send_cmd("at", command=b'CM')
     time.sleep(0.5)
-    xb.send_cmd("at", command=b'ED')
+#    xb.send_cmd("at", command=b'ED')
     while True:
         logging.info("TX [{:x}]: PING".format(0xffff))
         xb.send(b'PING', dest = 0xffff)
         
         
         
-        time.sleep(0.5 + random.random())
+        time.sleep(2.5 + random.random())
         
         
         

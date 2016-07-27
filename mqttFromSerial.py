@@ -7,7 +7,7 @@ import sys
 
 logfile = os.path.splitext(sys.argv[0])[0] + ".log"
 
-logging.basicConfig(level=logging.DEBUG,
+logging.basicConfig(level=logging.INFO,
                     handlers=(logging.StreamHandler(sys.stdout),
                               logging.handlers.RotatingFileHandler(logfile,
                                                                     maxBytes = 256*1024,
