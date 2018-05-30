@@ -108,6 +108,10 @@ class XTPServer():
                             f.write(r)
                             f.close()
                     else:
+                        # make sure output directory exists, cron job might have cleared it if empty.
+                        outpath = os.path.split(outfile)[0]
+                        os.makedirs(outpath, exist_ok=True)
+
                         with open (outfile, 'wb') as f:
                             f.seek(self.transfers[srcaddr]['offset'], io.SEEK_SET)                            
                             f.write(r)
