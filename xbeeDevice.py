@@ -266,10 +266,10 @@ class XBeeDevice:
         if pkt['id'] == 'tx_status':
             if pkt['status'] != b'\x00':
                 s = pkt['status']
-                if s in XBee900HP.tx_status_strings:
-                    self.log.warn("unsuccessful tx: {}".format(XBee900HP.tx_status_strings[s]))
-                else:
-                    self.log.warn("unsuccessful tx: {}".format(s))
+                #if s in XBee900HP.tx_status_strings:
+                #    self.log.warn("unsuccessful tx: {}".format(XBee900HP.tx_status_strings[s]))
+                #else:
+                self.log.warn("unsuccessful tx: {}".format(s))
                     
         if pkt['id'] == 'at_response':   
             if 'status' in pkt and pkt['status'] > b'\x00':
